@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Travel Assistant</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .chat-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 70vh;
+        }
+
+        .chat-messages {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background-color: #3498db;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .assistant-message {
+            background-color: #e9e9eb;
+            color: #333;
+        }
+
+        .input-form {
+            display: flex;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .input-field {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ced4da;
+            border-radius: 20px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .send-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .send-button:hover {
+            background-color: #2980b9;
+        }
+
+        .tools-container {
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .tools-title {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+
+        .tools-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .tool-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .tool-item:last-child {
+            border-bottom: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: #7f8c8d;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>MCP Travel Assistant</h1>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant-message">
+                Hello! I'm your travel assistant. Ask me questions about travel, locations, maps, directions, or
+                tourism.
+            </div>
+        </div>
+        <form class="input-form" id="chatForm">
+            <input type="text" class="input-field" id="messageInput" placeholder="Ask about travel..."
+                autocomplete="off">
+            <button type="submit" class="send-button">Send</button>
+        </form>
+    </div>
+
+    <div class="tools-container">
+        <h3 class="tools-title">Available Tools</h3>
+        <div id="toolsList" class="tools-list">
+            <div class="loading">Loading available tools...</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatMessages = document.getElementById('chatMessages');
+            const chatForm = document.getElementById('chatForm');
+            const messageInput = document.getElementById('messageInput');
+            const toolsList = document.getElementById('toolsList');
+
+            // Server URL - adjust if your server runs on a different port or host
+            const serverUrl = 'http://164.92.219.45:3000';
+
+            // Load available tools when the page loads
+            fetchTools();
+
+            // Handle form submission
+            chatForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const userMessage = messageInput.value.trim();
+                if (!userMessage) return;
+
+                // Display user message
+                addMessage(userMessage, 'user');
+                messageInput.value = '';
+
+                // Add loading indicator
+                const loadingId = addLoadingIndicator();
+
+                try {
+                    // Send message to server
+                    const response = await fetch(`${serverUrl}/chat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            messages: [
+                                { role: 'user', content: userMessage }
+                            ]
+                        })
+                    });
+
+                    // Remove loading indicator
+                    removeLoadingIndicator(loadingId);
+
+                    if (!response.ok) {
+                        throw new Error('Server error');
+                    }
+
+                    const data = await response.json();
+                    addMessage(data.response || 'Sorry, I couldn\'t process that request.', 'assistant');
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    // Remove loading indicator
+                    removeLoadingIndicator(loadingId);
+                    addMessage('Sorry, there was an error processing your request.', 'assistant');
+                }
+            });
+
+            // Function to fetch available tools
+            async function fetchTools() {
+                try {
+                    const response = await fetch(`${serverUrl}/tools`);
+
+                    if (!response.ok) {
+                        throw new Error('Server error');
+                    }
+
+                    const data = await response.json();
+
+                    // Display tools
+                    toolsList.innerHTML = '';
+                    if (data.tools && data.tools.length > 0) {
+                        data.tools.forEach(tool => {
+                            const toolItem = document.createElement('div');
+                            toolItem.className = 'tool-item';
+                            toolItem.innerHTML = `<strong>${tool.id}</strong>: ${tool.description}`;
+                            toolsList.appendChild(toolItem);
+                        });
+                    } else {
+                        toolsList.innerHTML = '<div>No tools available</div>';
+                    }
+
+                } catch (error) {
+                    console.error('Error fetching tools:', error);
+                    toolsList.innerHTML = '<div>Error loading tools</div>';
+                }
+            }
+
+            // Function to add a message to the chat
+            function addMessage(text, role) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}-message`;
+                messageDiv.textContent = text;
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            // Function to add a loading indicator
+            function addLoadingIndicator() {
+                const loadingId = 'loading-' + Date.now();
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'message assistant-message loading';
+                loadingDiv.id = loadingId;
+                loadingDiv.textContent = 'Thinking...';
+                chatMessages.appendChild(loadingDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return loadingId;
+            }
+
+            // Function to remove a loading indicator
+            function removeLoadingIndicator(id) {
+                const loadingElement = document.getElementById(id);
+                if (loadingElement) {
+                    loadingElement.remove();
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
